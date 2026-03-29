@@ -1,6 +1,7 @@
 from collections import UserDict
 from datetime import datetime, timedelta
 from typing import List, Optional, Tuple, Callable
+import pickle
 
 
 class Field:
@@ -46,6 +47,8 @@ class Record:
         self.birthday: Optional[Birthday] = None
 
     def add_phone(self, phone: str):
+        if self.find_phone(phone):
+            raise ValueError(f"Phone {phone} already exists.")
         self.phones.append(Phone(phone))
 
     def find_phone(self, phone: str) -> Optional[Phone]:
@@ -107,12 +110,27 @@ class AddressBook(UserDict):
             if 0 <= (bday - today).days <= 7:
                 if bday.weekday() >= 5:
                     bday += timedelta(days=7 - bday.weekday())
-                upcoming.append({
-                    "name": record.name.value,
-                    "congratulation_date": bday.strftime("%d.%m.%Y")
-                })
+                upcoming.append(
+                    {
+                        "name": record.name.value,
+                        "congratulation_date": bday.strftime("%d.%m.%Y"),
+                    }
+                )
 
         return upcoming
+
+
+def save_data(book: AddressBook, filename: str = "addressbook.pkl"):
+    with open(filename, "wb") as f:
+        pickle.dump(book, f)
+
+
+def load_data(filename: str = "addressbook.pkl") -> AddressBook:
+    try:
+        with open(filename, "rb") as f:
+            return pickle.load(f)
+    except FileNotFoundError:
+        return AddressBook()
 
 
 def input_error(func: Callable) -> Callable:
@@ -128,6 +146,7 @@ def input_error(func: Callable) -> Callable:
             return "Contact not found."
         except IndexError:
             return "Enter the argument for the command."
+
     return inner
 
 
@@ -142,13 +161,13 @@ def parse_input(user_input: str) -> Tuple[str, List[str]]:
 def add_contact(args: List[str], book: AddressBook) -> str:
     name, phone, *_ = args
     record = book.find(name)
+    message = "Contact updated."
     if record is None:
         record = Record(name)
         book.add_record(record)
-        record.add_phone(phone)
-        return "Contact added."
+        message = "Contact added."
     record.add_phone(phone)
-    return "Phone added to existing contact."
+    return message
 
 
 @input_error
@@ -167,7 +186,16 @@ def show_phone(args: List[str], book: AddressBook) -> str:
     record = book.find(name)
     if record is None:
         raise KeyError
-    return str(record)
+    if not record.phones:
+        return f"{name} has no phones."
+    return f"{name}'s phones: {'; '.join(p.value for p in record.phones)}"
+
+
+@input_error
+def show_all(args: List[str], book: AddressBook) -> str:
+    if not book.data:
+        return "Address book is empty."
+    return "\n".join(f"{i}. {record}" for i, record in enumerate(book.data.values(), 1))
 
 
 @input_error
@@ -202,7 +230,7 @@ def birthdays(args: List[str], book: AddressBook) -> str:
 
 
 def main():
-    book = AddressBook()
+    book = load_data()
     print("Welcome to the assistant bot!")
 
     while True:
@@ -213,6 +241,7 @@ def main():
             continue
 
         if command in ["close", "exit"]:
+            save_data(book)
             print("Good bye!")
             break
         elif command == "hello":
@@ -224,11 +253,7 @@ def main():
         elif command == "phone":
             print(show_phone(args, book))
         elif command == "all":
-            if not book.data:
-                print("Address book is empty.")
-            else:
-                for record in book.data.values():
-                    print(record)
+            print(show_all(args, book))
         elif command == "add-birthday":
             print(add_birthday(args, book))
         elif command == "show-birthday":

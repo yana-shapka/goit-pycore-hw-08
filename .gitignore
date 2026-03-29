@@ -170,3 +170,5 @@ cython_debug/
 # Other settings
 !.idea/misc.xml
 # [jet_brains_custom]-[END]
+
+addressbook.pkl
